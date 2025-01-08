@@ -122,7 +122,8 @@ def main():
                              'numpy',
                              'ninepatch',
                              'pi_heif',
-                             'defusedxml']
+                             'defusedxml',
+                             'requests']
         check_packages(required_packages)
         return
     elif args.configfile:

@@ -99,7 +99,12 @@ model:
   log_level: "WARNING"                    # default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL
   log_file: ""                            # default="" for debugging set this to the path to a file. NB logging messages will
                                           # appended indefinitely so don't forget this. You will need to tidy it up later
-
+  useAlbum: False                         # default = False - Selector for using synology shared album	
+  useMineAlbum: False                    # default = False - Selector for using synology user album
+  albumName: ""                           # default = ""  Selects shared album to show   
+  mineAlbumName: ""                             # default = ""  Selects user album to show    
+  pic_dir_mine: "~/Pictures"                   # default="~/Pictures", root folder for images
+  
 mqtt:
   use_mqtt: False                         # default=False. Set True true, to enable mqtt
   server: "your_mqtt_broker"              # No defaults for server

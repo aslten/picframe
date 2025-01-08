@@ -3,7 +3,12 @@ import os
 import time
 import logging
 import locale
-from picframe import geo_reverse, image_cache
+
+
+# Add the root directory to sys.path
+#sys.path.append(str(Path(__file__).resolve().parent.parent))
+
+from picframe import geo_reverse, image_cache, image_synology
 
 DEFAULT_CONFIGFILE = "~/picframe_data/config/configuration.yaml"
 DEFAULT_CONFIG = {
@@ -84,6 +89,9 @@ DEFAULT_CONFIG = {
         'log_file': '',
         'location_filter': '',
         'tags_filter': '',
+        'useAlbum': False,
+        'useMineAlbum': False,
+        'albumName': ''
     },
     'mqtt': {
         'use_mqtt': False,  # Set tue true, to enable mqtt
@@ -154,9 +162,9 @@ class Model:
         self.__logger.debug('creating an instance of Model')
         self.__config = DEFAULT_CONFIG
         self.__last_file_change = 0.0
-        configfile = os.path.expanduser(configfile)
-        self.__logger.info("Open config file: %s:", configfile)
-        with open(configfile, 'r') as stream:
+        self.configfile = os.path.expanduser(configfile)
+        self.__logger.info("Open config file: %s:", self.configfile)
+        with open(self.configfile, 'r') as stream:
             try:
                 conf = yaml.safe_load(stream)
                 for section in ['viewer', 'model', 'mqtt', 'http', 'peripherals']:
@@ -181,6 +189,8 @@ class Model:
         self.__number_of_files = 0  # this is shortcut for len(__file_list)
         self.__reload_files = True
         self.__file_index = 0  # pointer to next position in __file_list
+        self.__file_index = 0  # pointer to next position in __file_list
+        self.__file_index = 0  # pointer to next position in __file_list
         self.__current_pics = (None, None)  # this hold a tuple of (pic, None) or two pic objects if portrait pairs
         self.__num_run_through = 0
 
@@ -200,6 +210,8 @@ class Model:
                                                     self.__geo_reverse,
                                                     model_config['update_interval'],
                                                     model_config['portrait_pairs'])
+
+
         self.__deleted_pictures = model_config['deleted_pictures']
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
         self.__sort_cols = model_config['sort_cols']
@@ -208,6 +220,39 @@ class Model:
         self.__where_clauses = {}
         self.location_filter = model_config['location_filter']
         self.tags_filter = model_config['tags_filter']
+        self.__useAlbum = model_config['useAlbum']
+        self.__useMineAlbum = model_config['useMineAlbum']
+        self.__albumName = model_config['albumName']
+        self.__mineAlbumName = model_config['mineAlbumName']
+        self.__pic_mine_dir = os.path.expanduser(model_config['pic_dir_mine'])
+        
+        self.__image_synology = image_synology.ImageSynology(model_config['update_interval'])
+        self.__image_synology.set_albumName(self.__albumName)
+        
+
+    def __writeEntryConfigFile(self, section, key, new_value):
+        try:
+            with open(self.configfile, 'r') as file:
+                data = yaml.safe_load(file)
+
+                # Update the key's value
+                if key in data[section]:
+                    data[section][key] = new_value
+                else:
+                    self.__logger.error(f"Key '{key}' not found in the config file.")
+                    return
+
+            # Write the updated YAML back to the file
+            with open(self.configfile, 'w') as file:
+                yaml.safe_dump(data, file, default_flow_style=False)
+                self.__logger.debug(f"Updated key '{key}' with new value: {new_value} in config file")
+                
+        except Exception:
+            self.__logger.error('Exception when trying to open config file to write new key value')
+    
+    
+
+    
 
     def get_viewer_config(self):
         return self.__config['viewer']
@@ -241,6 +286,7 @@ class Model:
     @fade_time.setter
     def fade_time(self, time):
         self.__config['model']['fade_time'] = time
+        self.__writeEntryConfigFile('model', 'fade_time', time)
 
     @property
     def time_delay(self):
@@ -249,6 +295,7 @@ class Model:
     @time_delay.setter
     def time_delay(self, time):
         self.__config['model']['time_delay'] = time
+        self.__writeEntryConfigFile('model', 'time_delay', time)
 
     @property
     def subdirectory(self):
@@ -267,7 +314,60 @@ class Model:
                 self.__subdirectory = dir
             self.__logger.info("Set subdirectory to: %s", self.__subdirectory)
             self.__reload_files = True
+            self.__writeEntryConfigFile('model', 'subdirectory', dir)
 
+    @property
+    def useAlbum(self):
+        return self.__useAlbum
+
+    @useAlbum.setter
+    def useAlbum(self, val):
+        if val != self.__useAlbum:
+            self.__reload_files = True
+        self.__useAlbum = val
+        self.__updateAlbumToUse()
+        self.__config['model']['useAlbum'] = val
+        self.__writeEntryConfigFile('model', 'useAlbum', val)
+
+    @property
+    def useMineAlbum(self):
+        return self.__useMineAlbum
+
+    @useMineAlbum.setter
+    def useMineAlbum(self, val):
+        if val != self.__useMineAlbum:
+            self.__reload_files = True
+        self.__useMineAlbum = val
+        self.__updateAlbumToUse()
+        self.__config['model']['useMineAlbum'] = val
+        self.__writeEntryConfigFile('model', 'useMineAlbum', val)
+
+    @property
+    def albumName(self):
+        return self.__albumName
+    
+    @albumName.setter
+    def albumName(self, name):
+        self.__image_synology.set_albumName(name)
+        if self.__albumName != name and self.__useAlbum == True:
+            self.__reload_files = True
+        self.__albumName = name
+        self.__config['model']['albumName'] = name
+        self.__writeEntryConfigFile('model', 'albumName', name)
+     
+    @property
+    def mineAlbumName(self):
+        return self.__mineAlbumName
+    
+    @mineAlbumName.setter
+    def mineAlbumName(self, name):
+        self.__image_synology.set_albumName(name)
+        if self.__mineAlbumName != name and self.__useMineAlbum == True:
+            self.__reload_files = True
+        self.__mineAlbumName = name
+        self.__config['model']['mineAlbumName'] = name
+        self.__writeEntryConfigFile('model', 'mineAlbumName', name)
+    
     @property
     def EXIF_TO_FIELD(self):  # bit convoluted TODO hold in config? not really configurable
         return self.__image_cache.EXIF_TO_FIELD
@@ -345,9 +445,12 @@ class Model:
 
     def pause_looping(self, val):
         self.__image_cache.pause_looping(val)
+        self.__image_synology.pause_looping(val)
+
 
     def stop_image_chache(self):
         self.__image_cache.stop()
+        self.__image_synology.stop()
 
     def purge_files(self):
         self.__image_cache.purge_files()
@@ -365,6 +468,15 @@ class Model:
         subdir_list.insert(0, root)
         return actual_dir, subdir_list
 
+
+    def get_album_list(self, team=False):
+        album_list = self.__image_synology.get_album_list(team)
+        if team == True:
+            actual_album = self.__albumName
+        else:
+            actual_album = self.__mineAlbumName
+        return actual_album, album_list
+    
     def force_reload(self):
         self.__reload_files = True
 
@@ -373,26 +485,28 @@ class Model:
 
     def get_next_file(self):
         missing_images = 0
-
         # loop until we acquire a valid image set
         while True:
             pic1 = None
             pic2 = None
+            self.__logger.info('Get next file')
 
             # Reload the playlist if requested
             if self.__reload_files:
                 for _i in range(5):  # give image_cache chance on first load if a large directory
                     self.__get_files()
                     missing_images = 0
+                    #print(self.__number_of_files)
                     if self.__number_of_files > 0:
                         break
                     time.sleep(0.5)
 
             # If we don't have any files to show, prepare the "no images" image
             # Also, set the reload_files flag so we'll check for new files on the next pass...
-            if self.__number_of_files == 0 or missing_images >= self.__number_of_files:
+            if (self.__number_of_files == 0 or missing_images >= self.__number_of_files) and self.__useAlbum == False:
                 pic1 = Pic(self.__no_files_img, 0, 0)
                 self.__reload_files = True
+                #print('no files to show')
                 break
 
             # If we've displayed all images...
@@ -406,22 +520,40 @@ class Model:
                 continue
 
             # Load the current image set
-            file_ids = self.__file_list[self.__file_index]
-            pic_row = self.__image_cache.get_file_info(file_ids[0])
-            pic1 = Pic(**pic_row) if pic_row is not None else None
-            if len(file_ids) == 2:
-                pic_row = self.__image_cache.get_file_info(file_ids[1])
-                pic2 = Pic(**pic_row) if pic_row is not None else None
+            
+            #TODONEW
+            if self.__useAlbum == False:
+                file_ids = self.__file_list[self.__file_index]
+                pic_row = self.__image_cache.get_file_info(file_ids[0])
+                pic1 = Pic(**pic_row) if pic_row is not None else None
 
-            # Verify the images in the selected image set actually exist on disk
-            # Blank out missing references and swap positions if necessary to try and get
-            # a valid image in the first slot.
-            if pic1 and not os.path.isfile(pic1.fname):
-                pic1 = None
-            if pic2 and not os.path.isfile(pic2.fname):
-                pic2 = None
-            if (not pic1 and pic2):
-                pic1, pic2 = pic2, pic1
+                if len(file_ids) == 2:
+                    pic_row = self.__image_cache.get_file_info(file_ids[1])
+                    pic2 = Pic(**pic_row) if pic_row is not None else None
+
+                # Verify the images in the selected image set actually exist on disk
+                # Blank out missing references and swap positions if necessary to try and get
+                # a valid image in the first slot.
+                if pic1 and not os.path.isfile(pic1.fname):
+                    pic1 = None
+                if pic2 and not os.path.isfile(pic2.fname):
+                    pic2 = None
+                if (not pic1 and pic2):
+                    pic1, pic2 = pic2, pic1
+
+            else:
+                file_id = self.__file_list[self.__file_index]
+                self.__logger.info('Get file from album')
+                pic_row = self.__image_synology.get_file_info(file_id)
+                firstPart = os.path.normpath(pic_row['fname']).split(os.sep)[0]
+                remaining_path = os.path.normpath(pic_row['fname']).split(os.sep)[1:]
+                remaining_path = os.path.join(*remaining_path)
+                if firstPart == 'shared':
+                    pic_row['fname'] = os.path.join(self.__pic_dir, remaining_path)
+                else:
+                    pic_row['fname'] = os.path.join(self.__pic_mine_dir, remaining_path)
+                self.__logger.info(pic_row)
+                pic1 = Pic(**pic_row) if pic_row is not None else None
 
             # Increment the image index for next time
             self.__file_index += 1
@@ -466,40 +598,70 @@ class Model:
                 break
 
     def __get_files(self):
-        if self.subdirectory != "":
-            picture_dir = os.path.join(self.__pic_dir, self.subdirectory)  # TODO catch, if subdirecotry does not exist
+        if self.__useAlbum == False:
+            if self.subdirectory != "":
+                picture_dir = os.path.join(self.__pic_dir, self.subdirectory)  # TODO catch, if subdirecotry does not exist
+            else:
+                picture_dir = self.__pic_dir
+            where_list = ["fname LIKE '{}/%'".format(picture_dir)]  # TODO / on end to stop 'test' also selecting test1 test2 etc  # noqa: E501
+            where_list.extend(self.__where_clauses.values())
+
+            if len(where_list) > 0:
+                where_clause = " AND ".join(where_list)  # TODO now always true - remove unreachable code
+            else:
+                where_clause = "1"
+
+            sort_list = []
+            recent_n = self.get_model_config()["recent_n"]
+            if recent_n > 0:
+                sort_list.append("last_modified < {:.0f}".format(time.time() - 3600 * 24 * recent_n))
+
+            if self.shuffle:
+                sort_list.append("RANDOM()")
+            else:
+                if self.__col_names is None:
+                    self.__col_names = self.__image_cache.get_column_names()  # do this once
+                for col in self.__sort_cols.split(","):
+                    colsplit = col.split()
+                    if colsplit[0] in self.__col_names and (len(colsplit) == 1 or colsplit[1].upper() in ("ASC", "DESC")):
+                        sort_list.append(col)
+                sort_list.append("fname ASC")  # always finally sort on this in case nothing else to sort on or sort_cols is "" # noqa: E501
+            sort_clause = ",".join(sort_list)
+
+            self.__file_list = self.__image_cache.query_cache(where_clause, sort_clause)
+            self.__number_of_files = len(self.__file_list)
+
+            self.__file_index = 0
+            self.__num_run_through = 0
+            self.__reload_files = False
+
+        elif self.useMineAlbum == True:
+            if self.__mineAlbumName != '':
+                
+                self.__file_list = self.__image_synology.get_file_list()
+                self.__number_of_files = len(self.__file_list)
+                self.__file_index = 0
+                self.__num_run_through = 0
+                self.__reload_files = False
+            else:
+                self.__useMineAlbum = False
+                self.__reload_files = False
         else:
-            picture_dir = self.__pic_dir
-        where_list = ["fname LIKE '{}/%'".format(picture_dir)]  # TODO / on end to stop 'test' also selecting test1 test2 etc  # noqa: E501
-        where_list.extend(self.__where_clauses.values())
+            if self.__albumName != '':
+                self.__file_list = self.__image_synology.get_file_list()
+                self.__number_of_files = len(self.__file_list)
+                self.__file_index = 0
+                self.__num_run_through = 0
+                self.__reload_files = False
+            else:
+                self.__useAlbum = False
+                self.__reload_files = False  
 
-        if len(where_list) > 0:
-            where_clause = " AND ".join(where_list)  # TODO now always true - remove unreachable code
+    def __updateAlbumToUse(self):
+        if self.__useMineAlbum == True:
+            self.__image_synology.set_albumName(self.__mineAlbumName)
         else:
-            where_clause = "1"
-
-        sort_list = []
-        recent_n = self.get_model_config()["recent_n"]
-        if recent_n > 0:
-            sort_list.append("last_modified < {:.0f}".format(time.time() - 3600 * 24 * recent_n))
-
-        if self.shuffle:
-            sort_list.append("RANDOM()")
-        else:
-            if self.__col_names is None:
-                self.__col_names = self.__image_cache.get_column_names()  # do this once
-            for col in self.__sort_cols.split(","):
-                colsplit = col.split()
-                if colsplit[0] in self.__col_names and (len(colsplit) == 1 or colsplit[1].upper() in ("ASC", "DESC")):
-                    sort_list.append(col)
-            sort_list.append("fname ASC")  # always finally sort on this in case nothing else to sort on or sort_cols is "" # noqa: E501
-        sort_clause = ",".join(sort_list)
-
-        self.__file_list = self.__image_cache.query_cache(where_clause, sort_clause)
-        self.__number_of_files = len(self.__file_list)
-        self.__file_index = 0
-        self.__num_run_through = 0
-        self.__reload_files = False
+            self.__image_synology.set_albumName(self.__albumName)
 
     def __generate_random_string(self, length):
         random_bytes = os.urandom(length // 2)

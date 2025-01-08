@@ -3,6 +3,12 @@ import os
 import time
 import logging
 import threading
+import sys
+from pathlib import Path
+import iptcinfo3
+
+# Add the root directory to sys.path
+#sys.path.append(str(Path(__file__).resolve().parent.parent))
 from picframe import get_image_meta
 
 
@@ -82,6 +88,7 @@ class ImageCache:
         if not self.__modified_files:
             self.__logger.debug('No unprocessed files in memory, checking disk')
             self.__modified_folders = self.__get_modified_folders()
+
             self.__modified_files = self.__get_modified_files(self.__modified_folders)
             self.__logger.debug('Found %d new files on disk', len(self.__modified_files))
 
@@ -99,6 +106,7 @@ class ImageCache:
         # If looping is still not paused, remove any files or folders from the db that are no longer on disk
         if not self.__pause_looping:
             self.__purge_missing_files_and_folders()
+
 
         # Commit the current set of changes
         self.__db_write_lock.acquire()
@@ -356,14 +364,31 @@ class ImageCache:
     def __get_modified_folders(self):
         out_of_date_folders = []
         sql_select = "SELECT * FROM folder WHERE name = ?"
-        for dir in [d[0] for d in os.walk(self.__picture_dir, followlinks=self.__follow_links)]:
-            if os.path.basename(dir):
-                if os.path.basename(dir)[0] == '.':
-                    continue  # ignore hidden folders
-            mod_tm = int(os.stat(dir).st_mtime)
-            found = self.__db.execute(sql_select, (dir,)).fetchone()
+
+        subfolders  = []
+        for dirpath, dirnames, _ in os.walk(self.__picture_dir, followlinks=self.__follow_links):
+            # Filter out unwanted directories
+            dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != "@eaDir"]
+            # Append the current directory path
+            subfolders.append(dirpath)
+
+
+        for directory in subfolders:
+
+        
+        #for dir in [d[1] for d in os.walk(self.__picture_dir, followlinks=self.__follow_links)]:
+         #   print(dir)
+        #    if os.path.basename(dir):
+        #        if os.path.basename(dir)[0] == '.'or os.path.basename(dir)[0] =='@':
+         #           print('discarded')
+         #           print(dir)
+          #          continue  # ignore hidden folders
+          #  print('ok')
+          #  print(dir)
+            mod_tm = int(os.stat(directory).st_mtime)
+            found = self.__db.execute(sql_select, (directory,)).fetchone()
             if not found or found['last_modified'] < mod_tm or found['missing'] == 1:
-                out_of_date_folders.append((dir, mod_tm))
+                out_of_date_folders.append((directory, mod_tm))
         return out_of_date_folders
 
     def __get_modified_files(self, modified_folders):
@@ -520,4 +545,4 @@ class ImageCache:
 
 # If being executed (instead of imported), kick it off...
 if __name__ == "__main__":
-    cache = ImageCache(picture_dir='/home/pi/Pictures', follow_links=False, db_file='/home/pi/db.db3', geo_reverse=None, update_interval=2)
+    cache = ImageCache(picture_dir='/home/aurora/photos/', follow_links=True, db_file='/home/aurora/db.db3', geo_reverse=None, update_interval=2)

@@ -6,6 +6,7 @@ import signal
 import sys
 import ssl
 
+DEV_MODE = True
 
 def make_date(txt):
     dt = (txt.replace('/', ':')
@@ -120,6 +121,41 @@ class Controller:
         self.__model.force_reload()
         self.__next_tm = 0
 
+
+    @property
+    def useAlbum(self):
+        return self.__model.useAlbum
+
+    @useAlbum.setter
+    def useAlbum(self, val: bool):
+        self.__model.useAlbum = val
+        self.__next_tm = 0
+
+    @property
+    def useMineAlbum(self):
+        return self.__model.useMineAlbum
+
+    @useMineAlbum.setter
+    def useMineAlbum(self, val: bool):
+        self.__model.useMineAlbum = val
+        self.__next_tm = 0
+
+    @property
+    def albumName(self):
+        return self.__model.albumName
+
+    @albumName.setter
+    def albumName(self, val: str):
+        self.__model.albumName = val
+            
+    @property
+    def mineAlbumName(self):
+        return self.__model.mineAlbumName
+
+    @mineAlbumName.setter
+    def mineAlbumName(self, val: str):
+        self.__model.mineAlbumName = val
+
     @property
     def date_from(self):
         return self.__date_from
@@ -157,7 +193,10 @@ class Controller:
 
     @property
     def display_is_on(self):
-        return self.__viewer.display_is_on
+        if DEV_MODE == True:
+            return True
+        else:
+            return self.__viewer.display_is_on
 
     @display_is_on.setter
     def display_is_on(self, on_off):
@@ -168,7 +207,10 @@ class Controller:
 
     @property
     def clock_is_on(self):
-        return self.__viewer.clock_is_on
+        if DEV_MODE == True:
+            return True
+        else:
+            return self.__viewer.clock_is_on
 
     @clock_is_on.setter
     def clock_is_on(self, on_off):
@@ -210,7 +252,10 @@ class Controller:
 
     @property
     def brightness(self):
-        return self.__viewer.get_brightness()
+        if DEV_MODE == True:
+            return 50
+        else:
+            return self.__viewer.get_brightness()
 
     @brightness.setter
     def brightness(self, val):
@@ -220,7 +265,10 @@ class Controller:
 
     @property
     def matting_images(self):
-        return self.__viewer.get_matting_images()
+        if DEV_MODE == True:
+            return True
+        else:
+            return self.__viewer.get_matting_images()
 
     @matting_images.setter
     def matting_images(self, val):
@@ -255,6 +303,10 @@ class Controller:
         actual_dir, dir_list = self.__model.get_directory_list()
         return actual_dir, dir_list
 
+    def get_album_list(self, team=False):
+        actual_album, album_list = self.__model.get_album_list(team)
+        return actual_album, album_list
+
     def get_current_path(self):
         (pic, _) = self.__model.get_current_pics()
         return pic.fname
@@ -262,6 +314,7 @@ class Controller:
     def loop(self):  # TODO exit loop gracefully and call image_cache.stop()
         # catch ctrl-c
         signal.signal(signal.SIGINT, self.__signal_handler)
+        
 
         while self.keep_looping:
             time_delay = self.__model.time_delay
@@ -270,12 +323,15 @@ class Controller:
             tm = time.time()
             pics = None  # get_next_file returns a tuple of two in case paired portraits have been specified
             if not self.paused and tm > self.__next_tm or self.__force_navigate:
+                #self.publish_state()
                 self.__next_tm = tm + self.__model.time_delay
                 self.__force_navigate = False
                 pics = self.__model.get_next_file()
                 if pics[0] is None:
                     self.__next_tm = 0  # skip this image file moved or otherwise not on db
                     pics = None  # signal slideshow_is_running not to load new image
+                    if self.__mqtt_config['use_mqtt']:
+                        self.publish_state()
                 else:
                     image_attr = {}
                     for key in self.__model.get_model_config()['image_attr']:
@@ -289,8 +345,14 @@ class Controller:
                             image_attr[key] = pics[0].__dict__[field_name]  # TODO nicer using namedtuple for Pic
                     if self.__mqtt_config['use_mqtt']:
                         self.publish_state(pics[0].fname, image_attr)
-            self.__model.pause_looping = self.__viewer.is_in_transition()
-            (loop_running, skip_image) = self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused)
+
+            if DEV_MODE == True:
+                loop_running = True
+                skip_image = False
+            else:
+                self.__model.pause_looping = self.__viewer.is_in_transition()
+                (loop_running, skip_image) = self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused)
+            
             if not loop_running:
                 break
             if skip_image:
@@ -298,7 +360,8 @@ class Controller:
             self.__interface_peripherals.check_input()
 
     def start(self):
-        self.__viewer.slideshow_start()
+        if DEV_MODE == False:
+            self.__viewer.slideshow_start()
         from picframe.interface_peripherals import InterfacePeripherals
         self.__interface_peripherals = InterfacePeripherals(self.__model, self.__viewer, self)
 
@@ -341,7 +404,8 @@ class Controller:
         if self.__interface_http:
             self.__interface_http.stop()
         self.__model.stop_image_chache()  # close db tidily (blocks till closed)
-        self.__viewer.slideshow_stop()  # do this last
+        if DEV_MODE == False:
+            self.__viewer.slideshow_stop()  # do this last
 
     def __signal_handler(self, sig, frame):
         print('You pressed Ctrl-c!')

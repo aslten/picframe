@@ -158,6 +158,18 @@ class InterfaceMQTT:
         command_topic = self.__device_id + "/directory"
         client.subscribe(command_topic, qos=0)
 
+        _, shared_album_list = self.__controller.get_album_list(True)
+        shared_album_list.sort()
+        self.__setup_select(client, "shared_album", shared_album_list, "mdi:folder-multiple-image", available_topic, init=True)
+        command_topic = self.__device_id + "/shared_album"
+        client.subscribe(command_topic, qos=0)
+
+        _, mine_album_list = self.__controller.get_album_list(False)
+        mine_album_list.sort()
+        self.__setup_select(client, "mine_album", mine_album_list, "mdi:folder-multiple-image", available_topic, init=True)
+        command_topic = self.__device_id + "/mine_album"
+        client.subscribe(command_topic, qos=0)
+
         # switches
         self.__setup_switch(client, "text_refresh", "mdi:refresh", available_topic, entity_category="config")
         self.__setup_switch(client, "name_toggle", "mdi:subtitles", available_topic,
@@ -182,6 +194,10 @@ class InterfaceMQTT:
                             self.__controller.shuffle)
         self.__setup_switch(client, "paused", "mdi:pause", available_topic,
                             self.__controller.paused)
+        self.__setup_switch(client, "use_album", "mdi:folder", available_topic,
+                            self.__controller.useAlbum, entity_category="config")
+        self.__setup_switch(client, "use_mine_album", "mdi:folder", available_topic,
+                            self.__controller.useMineAlbum, entity_category="config")
 
         # buttons
         self.__setup_button(client, "delete", "mdi:delete", available_topic)
@@ -436,6 +452,8 @@ class InterfaceMQTT:
         switch_topic_head = "homeassistant/switch/" + self.__device_id
         button_topic_head = "homeassistant/button/" + self.__device_id
 
+
+
         # ##### switches ######
         # display
         if message.topic == switch_topic_head + "_display/set":
@@ -521,6 +539,28 @@ class InterfaceMQTT:
             if msg in ("ON", "OFF"):
                 self.__controller.set_show_text("folder", msg)
                 client.publish(state_topic, msg, retain=True)
+
+        # album_on
+        elif message.topic == switch_topic_head + "_use_album/set":
+            state_topic = switch_topic_head + "_use_album/state"
+            if msg == "ON":
+                self.__controller.useAlbum = True
+                client.publish(state_topic, "ON", retain=True)
+            elif msg == "OFF":
+                self.__controller.useAlbum = False
+                client.publish(state_topic, "OFF", retain=True)
+
+        # mine_album_on
+        elif message.topic == switch_topic_head + "_use_mine_album/set":
+            state_topic = switch_topic_head + "_use_mine_album/state"
+
+            if msg == "ON":
+                self.__controller.useMineAlbum = True
+                client.publish(state_topic, "ON", retain=True)
+            elif msg == "OFF":
+                self.__controller.useMineAlbum = False
+                client.publish(state_topic, "OFF", retain=True)
+                
         # text_off
         elif message.topic == switch_topic_head + "_text_off/set":
             state_topic = switch_topic_head + "_text_off/state"
@@ -551,6 +591,14 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/directory":
             self.__logger.info("Recieved subdirectory: %s", msg)
             self.__controller.subdirectory = msg
+        # change shared album
+        elif message.topic == self.__device_id + "/shared_album":
+            self.__logger.info("Recieved shared album: %s", msg)
+            self.__controller.albumName = msg
+        # change mine album
+        elif message.topic == self.__device_id + "/mine_album":
+            self.__logger.info("Recieved mine album: %s", msg)
+            self.__controller.mineAlbumName = msg
         # date_from
         elif message.topic == self.__device_id + "/date_from":
             self.__logger.info("Recieved date_from: %s", msg)
@@ -609,7 +657,6 @@ class InterfaceMQTT:
 
         sensor_state_payload = {}
         image_state_payload = {}
-
         # image
         # image attributes
         if image_attr is not None:
@@ -628,6 +675,12 @@ class InterfaceMQTT:
         # directory sensor
         actual_dir, dir_list = self.__controller.get_directory_list()
         sensor_state_payload["directory"] = actual_dir
+        # shared album sensor
+        actual_shared_album, shared_album_list = self.__controller.get_album_list(True)
+        sensor_state_payload["shared_album"] = actual_shared_album
+        # mine album sensor
+        actual_mine_album, mine_album_list = self.__controller.get_album_list(False)
+        sensor_state_payload["mine_album"] = actual_mine_album
         # image counter sensor
         sensor_state_payload["image_counter"] = str(self.__controller.get_number_of_files())
         # date_from
@@ -653,6 +706,14 @@ class InterfaceMQTT:
         self.__setup_select(self.__client, "directory", dir_list,
                             "mdi:folder-multiple-image", available_topic, init=False)
 
+        shared_album_list.sort()
+        self.__setup_select(self.__client, "shared_album", shared_album_list,
+                            "mdi:folder-multiple-image", available_topic, init=False)
+
+        mine_album_list.sort()
+        self.__setup_select(self.__client, "mine_album", mine_album_list,
+                            "mdi:folder-multiple-image", available_topic, init=False)
+
         self.__logger.info("Send sensor state: %s", sensor_state_payload)
         sensor_state_topic = sensor_topic_head + "/state"
         self.__client.publish(sensor_state_topic, json.dumps(sensor_state_payload), qos=0, retain=False)
@@ -669,6 +730,15 @@ class InterfaceMQTT:
         # display
         state_topic = switch_topic_head + "_display/state"
         payload = "ON" if self.__controller.display_is_on else "OFF"
+        self.__client.publish(state_topic, payload, retain=True)
+        # useAlbum
+        state_topic = switch_topic_head + "_use_album/state"
+
+        payload = "ON" if self.__controller.useAlbum else "OFF"
+        self.__client.publish(state_topic, payload, retain=True)
+        # useMineAlbum
+        state_topic = switch_topic_head + "_use_mine_album/state"
+        payload = "ON" if self.__controller.useMineAlbum else "OFF"
         self.__client.publish(state_topic, payload, retain=True)
 
         # send last will and testament
