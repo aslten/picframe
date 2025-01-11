@@ -450,7 +450,9 @@ class Model:
 
     def stop_image_chache(self):
         self.__image_cache.stop()
+        
         self.__image_synology.stop()
+        
 
     def purge_files(self):
         self.__image_cache.purge_files()

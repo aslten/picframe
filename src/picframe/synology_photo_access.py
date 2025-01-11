@@ -109,16 +109,18 @@ class SynologyAccess():
             self.__logger.debug('Completed folder update')
             for _ in range(self.interval):
                 if self._stop_event.is_set():
-                    return
+                    break
                 time.sleep(1)
+        self.__shutdown_completed = True
 
     def stop(self):
         """
         Stop the periodic task and wait for the thread to terminate.
         """
-        print('try to stop')
+        self.__shutdown_completed = False
         self._stop_event.set()
-        self._thread.join()
+        while not self.__shutdown_completed:
+            time.sleep(0.05)  # make function blocking to ensure staged shutdown
         self.logout()
 
 
@@ -342,7 +344,11 @@ class SynologyAccess():
     def updateFolderDictionary(self):
         #self.folderDict = {}
         self.build_folder_dictionary(False)
+        if self._stop_event.is_set():
+            return
         self.build_folder_dictionary(True)
+        if self._stop_event.is_set():
+            return
         self.save_folderdict_to_file()
 
     def get_root_folder(self, team=False):
@@ -385,9 +391,7 @@ class SynologyAccess():
 
         # Get folders in parent folder
         folders = self.get_folders(None, team)
- 
         self.folderDict.update(folders)
-
         self.walk_the_folders(folders, team)
 
     def walk_the_folders(self, theDict, team):
@@ -396,6 +400,8 @@ class SynologyAccess():
 
 
         for key, value in theDict.items():
+            if self._stop_event.is_set():
+                break
             if isinstance(value, dict):  # Check if the value is a dictionary
                 theFolders = self.get_folders(key, team)
                 self.folderDict.update(theFolders)

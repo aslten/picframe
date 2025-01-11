@@ -52,7 +52,10 @@ class ImageSynology:
         while self.__keep_looping:
             if not self.__pause_looping and self.__albumName != '':
                 self.create_album_list()
-                time.sleep(self.__update_interval)
+                for _ in range(self.__update_interval):
+                    if self.__keep_looping == False:
+                        break
+                    time.sleep(1)
             time.sleep(0.01)
         self.__shutdown_completed = True
 

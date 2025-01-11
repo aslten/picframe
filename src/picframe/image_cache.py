@@ -59,8 +59,12 @@ class ImageCache:
         while self.__keep_looping:
             if not self.__pause_looping:
                 self.update_cache()
-                time.sleep(self.__update_interval)
+                for _ in range(self.__update_interval):
+                    if self.__keep_looping == False:
+                        break
+                    time.sleep(1)
             time.sleep(0.01)
+
         self.__db_write_lock.acquire()
         self.__db.commit()  # close after update_cache finished for last time
         self.__db_write_lock.release()
@@ -74,6 +78,7 @@ class ImageCache:
         self.__keep_looping = False
         while not self.__shutdown_completed:
             time.sleep(0.05)  # make function blocking to ensure staged shutdown
+
 
     def purge_files(self):
         self.__purge_files = True
@@ -91,20 +96,20 @@ class ImageCache:
 
             self.__modified_files = self.__get_modified_files(self.__modified_folders)
             self.__logger.debug('Found %d new files on disk', len(self.__modified_files))
-
+            
         # While we have files to process and looping isn't paused
-        while self.__modified_files and not self.__pause_looping:
+        while self.__modified_files and not self.__pause_looping and self.__keep_looping:
             file = self.__modified_files.pop(0)
             self.__logger.debug('Inserting: %s', file)
             self.__insert_file(file)
-
+        
         # If we've process all files in the current collection, update the cached folder info
-        if not self.__modified_files:
+        if not self.__modified_files and self.__keep_looping:
             self.__update_folder_info(self.__modified_folders)
             self.__modified_folders.clear()
-
+        
         # If looping is still not paused, remove any files or folders from the db that are no longer on disk
-        if not self.__pause_looping:
+        if not self.__pause_looping and self.__keep_looping:
             self.__purge_missing_files_and_folders()
 
 
@@ -367,6 +372,8 @@ class ImageCache:
 
         subfolders  = []
         for dirpath, dirnames, _ in os.walk(self.__picture_dir, followlinks=self.__follow_links):
+            if not self.__keep_looping:
+                return out_of_date_folders
             # Filter out unwanted directories
             dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != "@eaDir"]
             # Append the current directory path
@@ -374,6 +381,8 @@ class ImageCache:
 
 
         for directory in subfolders:
+            if not self.__keep_looping:
+                return out_of_date_folders
 
         
         #for dir in [d[1] for d in os.walk(self.__picture_dir, followlinks=self.__follow_links)]:
@@ -403,6 +412,8 @@ class ImageCache:
         """
         for dir, _date in modified_folders:
             for file in os.listdir(dir):
+                if not self.__keep_looping:
+                    return out_of_date_folders
                 base, extension = os.path.splitext(file)
                 if (extension.lower() in ImageCache.EXTENSIONS
                         # have to filter out all the Apple junk
@@ -449,6 +460,8 @@ class ImageCache:
         update_data = []
         sql = "UPDATE folder SET last_modified = ?, missing = 0 WHERE name = ?"
         for folder, modtime in folder_collection:
+            if not self.__keep_looping:
+                return out_of_date_folders
             update_data.append((modtime, folder))
         self.__db_write_lock.acquire()
         self.__db.executemany(sql, update_data)
