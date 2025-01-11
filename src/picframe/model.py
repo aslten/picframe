@@ -208,7 +208,7 @@ class Model:
                                                     model_config['follow_links'],
                                                     os.path.expanduser(model_config['db_file']),
                                                     self.__geo_reverse,
-                                                    model_config['update_interval'],
+                                                    int(model_config['update_interval']),
                                                     model_config['portrait_pairs'])
 
 
@@ -226,7 +226,7 @@ class Model:
         self.__mineAlbumName = model_config['mineAlbumName']
         self.__pic_mine_dir = os.path.expanduser(model_config['pic_dir_mine'])
         
-        self.__image_synology = image_synology.ImageSynology(model_config['update_interval'])
+        self.__image_synology = image_synology.ImageSynology(int(model_config['update_interval']))
         self.__image_synology.set_albumName(self.__albumName)
         
 
