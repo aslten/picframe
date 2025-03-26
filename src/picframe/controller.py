@@ -6,7 +6,7 @@ import signal
 import sys
 import ssl
 
-DEV_MODE = True
+DEV_MODE = False
 
 def make_date(txt):
     dt = (txt.replace('/', ':')

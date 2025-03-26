@@ -129,6 +129,17 @@ class ViewerDisplay:
                 self.__logger.debug("Display ON/OFF is X with dpms enabled, but an error occurred")
                 self.__logger.debug("Cause: %s", e)
             return True
+        elif self.__display_power == 2:
+            try: # Wayland: use wlr-randr
+                output = subprocess.check_output(["wlr-randr"])
+                output_str = output.decode()
+                for line in output_str.splitlines():
+                    if "enabled" in line:
+                        return True
+                return False
+            except Exception as e:
+                self.__logger.debug("Display ON/OFF is Wayland (wlr-randr), but an error occurred")
+                self.__logger.debug("Cause: %s", e)
         else:
             self.__logger.warning("Unsupported setting for display_power=%d.", self.__display_power)
             return True
@@ -539,7 +550,9 @@ class ViewerDisplay:
             else:  # could have a NO IMAGES selected and being drawn
                 for block in range(2):
                     self.__textblocks[block] = None
-
+            if self.__sfg is None:
+                print("Error self.__sfg is None - cannot display image.")
+                return loop_running, False
             if self.__sbg is None:  # first time through
                 self.__sbg = self.__sfg
             self.__slide.set_textures([self.__sfg, self.__sbg])
