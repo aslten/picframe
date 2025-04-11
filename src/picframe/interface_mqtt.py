@@ -203,6 +203,8 @@ class InterfaceMQTT:
         self.__setup_button(client, "delete", "mdi:delete", available_topic)
         self.__setup_button(client, "back", "mdi:skip-previous", available_topic)
         self.__setup_button(client, "next", "mdi:skip-next", available_topic)
+        self.__setup_button(client, "refresh_album_list", "mdi:folder-refresh", available_topic)
+        self.__setup_button(client, "refresh_file_list", "mdi:folder-refresh", available_topic)
 
         client.subscribe(self.__device_id + "/purge_files", qos=0)  # close down without killing!
         client.subscribe(self.__device_id + "/stop", qos=0)  # close down without killing!
@@ -503,7 +505,14 @@ class InterfaceMQTT:
         elif message.topic == button_topic_head + "_delete/set":
             if msg == "ON":
                 self.__controller.delete()
-        # title on
+         # refresh album list
+        elif message.topic == button_topic_head + "_refresh_album_list/set":
+            if msg == "ON":
+                self.__controller.refresh_album_list()# title on
+         # refresh file list
+        elif message.topic == button_topic_head + "_refresh_file_list/set":
+            if msg == "ON":
+                self.__controller.refresh_file_list()# title on
         elif message.topic == switch_topic_head + "_title_toggle/set":
             state_topic = switch_topic_head + "_title_toggle/state"
             if msg in ("ON", "OFF"):

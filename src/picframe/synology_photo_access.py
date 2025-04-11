@@ -28,7 +28,10 @@ PHOTO_BROWSE_TEAM_FOLDER_API = "SYNO.FotoTeam.Browse.Folder"
 TEAM = True
 USER = False
 
-DEFAULT_FOLDERFILE = "~/picframe_data/config/folder.pkl"
+DEFAULT_FOLDER_FILE = "~/picframe_data/config/folder.pkl"
+DEFAULT_FILEINFO_FILE= "~/picframe_data/config/fileinfo.pkl"
+FOLDER_INFO = True
+FILE_INFO = False
 DEFAULT_CONFIGFILE = "~/picframe_data/config/config.ini"
 
 class SynologyAccess():
@@ -50,7 +53,8 @@ class SynologyAccess():
         self.sid = None
 
         self.albumsInformation = {}
-        self.folderDict = self.load_folderdict_from_file()
+        self.folderDict = self.load_dict_from_file(FOLDER_INFO)
+        self.fileInfoDict = self.load_dict_from_file(FILE_INFO)
 
         self.mineId = 0
 
@@ -66,7 +70,7 @@ class SynologyAccess():
         self._thread.start()
 
 
-    def load_folderdict_from_file(self):
+    def load_dict_from_file(self, fileType):
         """
         Load a dictionary from a Pickle file, handling the case where the file does not exist.
         
@@ -74,7 +78,12 @@ class SynologyAccess():
         :param default: Default value to return if the file does not exist. Defaults to an empty dictionary.
         :return: Dictionary loaded from the file, or the default value if the file does not exist.
         """
-        folderfile = os.path.expanduser(DEFAULT_FOLDERFILE)
+        if fileType == FOLDER_INFO:
+            filePath = DEFAULT_FOLDER_FILE
+        else:
+            filePath = DEFAULT_FILEINFO_FILE
+            
+        folderfile = os.path.expanduser(filePath)
         
         if not os.path.exists(folderfile):
             self.__logger.warning(f"Folder file {folderfile} not found. Returning empty dictionary.")
@@ -83,7 +92,7 @@ class SynologyAccess():
         with open(folderfile, 'rb') as file:
             return pickle.load(file)
 
-    def save_folderdict_to_file(self):
+    def save_folderdict_to_file(self, fileType):
         """
         Save a dictionary to a file in Pickle format. Overwrites existing content.
         
@@ -91,10 +100,18 @@ class SynologyAccess():
         :param file_path: Path to the file
         """
 
-        folderfile = os.path.expanduser(DEFAULT_FOLDERFILE)
+        if fileType == FOLDER_INFO:
+            filePath = DEFAULT_FOLDER_FILE
+        else:
+            filePath = DEFAULT_FILEINFO_FILE
+
+        folderfile = os.path.expanduser(filePath)
         
         with open(folderfile, 'wb') as file:
-            pickle.dump(self.folderDict, file)
+            if fileType == FOLDER_INFO:
+                pickle.dump(self.folderDict, file)
+            else:
+                pickle.dump(self.fileInfoDict, file)
 
     def _run_periodic_task(self):
         """
@@ -233,6 +250,7 @@ class SynologyAccess():
         #print(response.url)
         response.raise_for_status()
         data = response.json()
+        #print(data)
         self.__logger.debug(data)
         theAlbums = {}
         if not data["success"]:
@@ -243,14 +261,25 @@ class SynologyAccess():
                 theAlbums[album['name']]['id'] = album['id']
                 theAlbums[album['name']]['passphrase'] = album['passphrase']
                 theAlbums[album['name']]['owner_user_id'] = album['owner_user_id']
-
+                theAlbums[album['name']]['version'] = album['version']
+                
         self.albumsInformation = theAlbums
         self.__logger.debug('The album list')
         self.__logger.debug(theAlbums)
         #print(self.albumsInformation)
         return
 
-    def get_album(self, album_name):
+    def get_album(self, album_name, forceUpdate = False):
+
+        if album_name in self.fileInfoDict and not forceUpdate:
+            if album_name in self.albumsInformation:
+                if self.fileInfoDict[album_name]['version'] == self.albumsInformation[album_name]['version']:
+                    # File information is up to date
+                    self.listFileIndexes = self.fileInfoDict[album_name]['fileIds']
+                    self.file_list = self.fileInfoDict[album_name]['fileInfo']
+                    return
+                
+        # We need to fetch the file information
         if self.sid == None:
             self.__logger.error("No active session. Please login first.")
 
@@ -320,7 +349,13 @@ class SynologyAccess():
 
                  
                         self.listFileIndexes.append(theId)
-                    
+            tempAlbumInfo = {}
+            tempAlbumInfo['version'] = self.albumsInformation[album_name]['version']
+            tempAlbumInfo['fileIds'] = self.listFileIndexes 
+            tempAlbumInfo['fileInfo'] = self.file_list
+            self.fileInfoDict[album_name] = tempAlbumInfo
+            self.save_folderdict_to_file(DEFAULT_FILEINFO_FILE)
+            
         else:
             self.__logger.info('Album does not exist: ', album_name)
     
@@ -349,7 +384,7 @@ class SynologyAccess():
         self.build_folder_dictionary(True)
         if self._stop_event.is_set():
             return
-        self.save_folderdict_to_file()
+        self.save_folderdict_to_file(FOLDER_INFO)
 
     def get_root_folder(self, team=False):
         if team == True:
@@ -484,7 +519,7 @@ class SynologyAccess():
 if __name__ == "__main__":
     t = SynologyAccess()
     t.create_album_list()
-    u=t.get_file_list('test')
+    u=t.get_file_list('Marseillan okt 2022')
     print(u)
     #t.get_user_root_folder(True)
     #t.get_folder()
@@ -495,5 +530,5 @@ if __name__ == "__main__":
     print(t.get_album_list(True))
     for id in u:
         print(t.getFilePathFromFileList(id))
-    time.sleep(150)
+    time.sleep(5)
     t.stop()

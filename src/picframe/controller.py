@@ -95,6 +95,12 @@ class Controller:
         self.next()  # TODO check needed to avoid skipping one as record has been deleted from model.__file_list
         self.__next_tm = 0
 
+    def refresh_album_list(self):
+        self.__model.refresh_album_list()
+
+    def refresh_file_list(self):
+        self.__model.refresh_file_list()
+
     def set_show_text(self, txt_key=None, val="ON"):
         if val is True:  # allow to be called with boolean from httpserver
             val = "ON"

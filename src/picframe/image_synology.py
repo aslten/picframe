@@ -43,6 +43,8 @@ class ImageSynology:
         self.__pause_looping = False
         self.__shutdown_completed = False
 
+        self.forceUpdate = False
+
         self.__synology_photo = synology_photo_access.SynologyAccess()
 
         t = threading.Thread(target=self.__loop)
@@ -55,12 +57,18 @@ class ImageSynology:
                 for _ in range(self.__update_interval):
                     if self.__keep_looping == False:
                         break
+                    if self.forceUpdate == True:
+                        self.forceUpdate = False
+                        break
                     time.sleep(1)
             time.sleep(0.01)
         self.__shutdown_completed = True
 
     def pause_looping(self, value):
         self.__pause_looping = value
+
+    def forceUpdate(self):
+        self.forceUpdate = True
 
     def stop(self):
         self.__synology_photo.stop()
@@ -79,6 +87,9 @@ class ImageSynology:
         
     def get_album_list(self, team=False):
         return self.__synology_photo.get_album_list(team)
+
+    def update_file_list(self):
+        self.__synology_photo.get_album(self.__albumName, True)
 
     def get_file_list(self):
         return self.__synology_photo.get_file_list(self.__albumName)

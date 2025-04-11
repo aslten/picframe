@@ -3,6 +3,7 @@ import os
 import time
 import logging
 import locale
+import random
 
 
 # Add the root directory to sys.path
@@ -485,6 +486,13 @@ class Model:
     def set_next_file_to_previous_file(self):
         self.__file_index = (self.__file_index - 2) % self.__number_of_files  # TODO deleting last image results in ZeroDivisionError # noqa: E501
 
+    def refresh_album_list(self):
+        self.__image_synology.create_album_list()
+
+    def refresh_file_list(self):
+        self.__image_synology.update_file_list()
+        self.__reload_files = True
+
     def get_next_file(self):
         missing_images = 0
         # loop until we acquire a valid image set
@@ -641,6 +649,8 @@ class Model:
             if self.__mineAlbumName != '':
                 
                 self.__file_list = self.__image_synology.get_file_list()
+                if self.shuffle:
+                    random.shuffle(self.__file_list)
                 self.__number_of_files = len(self.__file_list)
                 self.__file_index = 0
                 self.__num_run_through = 0
@@ -651,6 +661,8 @@ class Model:
         else:
             if self.__albumName != '':
                 self.__file_list = self.__image_synology.get_file_list()
+                if self.shuffle:
+                    random.shuffle(self.__file_list)
                 self.__number_of_files = len(self.__file_list)
                 self.__file_index = 0
                 self.__num_run_through = 0
