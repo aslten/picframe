@@ -2,20 +2,20 @@ viewer:
   blur_amount: 12                         # default=12,  larger values than 12 will increase processing load quite a bit
   blur_zoom: 1.0                          # default=1.0, must be >= 1.0 which expands the backgorund to just fill the space around the image
   blur_edges: False                       # default=False, use blurred version of image to fill edges - will override FIT = False
-  edge_alpha: 0.5                         # default=0.5, background colour at edge. 1.0 would show reflection of image
+  edge_alpha: 0                         # default=0.5, background colour at edge. 1.0 would show reflection of image
   fps: 20.0                               # default=20.0
-  background: [0.2, 0.2, 0.3, 1.0]        # default=[0.2, 0.2, 0.3, 1.0], RGBA to fill edges when fitting
+  background: [0, 0, 0, 1.0]        # default=[0.2, 0.2, 0.3, 1.0], RGBA to fill edges when fitting
   blend_type: "blend"                     # default="blend", choices={"blend", "burn", "bump"}, type of blend the shader can do
   font_file: "~/picframe_data/data/fonts/NotoSans-Regular.ttf"
   shader: "~/picframe_data/data/shaders/blend_new"
   show_text_fm: "%b %d, %Y"               # default "%b %d, %Y", format to show date over the image
   show_text_tm: 20.0                      # default=20.0, time to show text over image with file name
   show_text_sz: 40                        # default=40, text character size
-  show_text: "title caption name date folder location"  # default="title caption name date folder location", show text, include combination of words: title, caption name, date, location, folder
+  show_text: ""  # default="title caption name date folder location", show text, include combination of words: title, caption name, date, location, folder
   text_justify: "L"                       # text justification L, C or R
   text_bkg_hgt: 0.25                      # default=0.25 (0.0-1.0), percentage of screen height for text background texture
   text_opacity: 1.0                       # default=1.0 (0.0-1.0), alpha value of text overlay
-  fit: False                              # default=False, True => scale image so all visible and leave 'gaps'
+  fit: True                              # default=False, True => scale image so all visible and leave 'gaps'
                                           #                False => crop image so no 'gaps'
   kenburns: False                         # default=False, will set fit->False and blur_edges->False
   display_x: 0                            # offset from left of screen (can be negative)
@@ -27,7 +27,7 @@ viewer:
   use_sdl2: True                          # default=True. pysdl2 can use display without xserver, it should be installed as a dependency of pi3d
                                           # but might need `sudo apt install libsdl2-dev` if picframe gives errors about missing sdl2
 
-  mat_images: 0.01                        # default=0.01, True, automatically mat all images. False, don't automatically mat any images. Real value, auto-mat all images with aspect ratio difference > than value
+  mat_images: False                        # default=0.01, True, automatically mat all images. False, don't automatically mat any images. Real value, auto-mat all images with aspect ratio difference > than value
   mat_type: null                          # default=null, A string containing the mat types to choose from when matting images. It can consist of any or
                                           # all of 'float float_polaroid float_color_wrap single_bevel double_bevel double_flat' (null or '' will use all mat types)
   outer_mat_color: null                   # default=null, Color of the outer mat as an RGB list. null will auto-select a reasonable color based on the image.
@@ -55,14 +55,14 @@ viewer:
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
   deleted_pictures: "~/DeletedPictures"   # move deleted pictures here
-  follow_links: False                     # default=False, By default, picframe will not walk down into symbolic links that resolve to directories. Set follow_links to True to visit directories pointed to by symlinks, on systems that support them.
+  follow_links: True                     # default=False, By default, picframe will not walk down into symbolic links that resolve to directories. Set follow_links to True to visit directories pointed to by symlinks, on systems that support them.
   no_files_img: "~/picframe_data/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
   subdirectory: ""                        # default="", subdir of pic_dir - can be changed by MQTT"
   recent_n: 7                             # default=7 (days), when shuffling file change date more recent than this number of days play before the rest
   reshuffle_num: 1                        # default=1, times through before reshuffling
-  time_delay: 200.0                       # default=200.0, time between consecutive slide starts - can be changed by MQTT
-  fade_time: 10.0                         # default=10.0, change time during which slides overlap - can be changed by MQTT"
-  update_interval: 2.0                    # default=2.0, time in seconds to wait between two consecutive scans for new files
+  time_delay: 30                       # default=200.0, time between consecutive slide starts - can be changed by MQTT
+  fade_time: 3                         # default=10.0, change time during which slides overlap - can be changed by MQTT"
+  update_interval: 60                    # default=2.0, time in seconds to wait between two consecutive scans for new files
   shuffle: True                           # default=True, shuffle on reloading image files - can be changed by MQTT"
   sort_cols: 'fname ASC'                  # default='fname ASC' can be any columns in the table with optional ASC or DESC separated by commas
                                           # fname, last_modified, file_id, orientation, exif_datetime, f_number,
@@ -106,12 +106,12 @@ model:
   pic_dir_mine: "~/Pictures"                   # default="~/Pictures", root folder for images
   
 mqtt:
-  use_mqtt: False                         # default=False. Set True true, to enable mqtt
+  use_mqtt: True                        # default=False. Set True true, to enable mqtt
   server: "your_mqtt_broker"              # No defaults for server
-  port: 8883                              # default=8883 for tls, 1883 else (tls must be "" then !!!!!)
+  port: 1883                              # default=8883 for tls, 1883 else (tls must be "" then !!!!!)
   login: "name"                           # your mqtt user
   password: "your_password"               # password for mqtt user
-  tls: "/path/to/your/ca.crt"             # filename including path to your ca.crt. If not used, must be set to "" !!!!
+  tls: ""             # filename including path to your ca.crt. If not used, must be set to "" !!!!
   device_id: "picframe"                   # default="picframe" unique id of device. change if there is more than one PictureFrame
   device_url: ""                          # if use_http==True, set url to picframe config page. Must be a valid url, or "" otherwise home assistant runs in an error.
 
