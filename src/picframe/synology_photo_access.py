@@ -270,20 +270,22 @@ class SynologyAccess():
         return
 
     def get_album(self, album_name, forceUpdate = False):
+        self.__logger.info('Called get album list')
 
         if self.albumsInformation == {}:
             self.list_all_albums()
 
+
         if album_name in self.fileInfoDict and not forceUpdate:
-            self.__logger.info(self.albumsInformation)
             if album_name in self.albumsInformation:
                 if self.fileInfoDict[album_name]['version'] == self.albumsInformation[album_name]['version']:
                     # File information is up to date
                     self.listFileIndexes = self.fileInfoDict[album_name]['fileIds']
                     self.file_list = self.fileInfoDict[album_name]['fileInfo']
-                    self.__logger.info('Album file list exists in saved file.')
-                    return
-       
+                    if self.file_list != {}:
+                        self.__logger.info('Album file list exists in saved file.')
+                        return
+           
         # We need to fetch the file information
         if self.sid == None:
             self.__logger.error("No active session. Please login first.")
@@ -292,76 +294,92 @@ class SynologyAccess():
         self.listFileIndexes = []
         
         if album_name in self.albumsInformation:
+            self.__logger.info('Found album in album information, now retrieving file list')
             session = requests.Session()
             session.cookies.set("id", self.sid)
             api_info = self.get_api_info()
             photo_url = f"{self.url}/webapi/{api_info[PHOTO_BROWSE_ALBUM_API]['path']}"
 
-            params = {
-                "api": PHOTO_BROWSE_ALBUM_API,
-                "method": "list",
-                "version": "4",
-                "offset": "0",
-                "limit": "1000",
-                "id": 1,
-                "passphrase": self.albumsInformation[album_name]['passphrase'],
-                'additional': '["description","tag","exif","resolution","orientation","gps","video_meta","video_convert","thumbnail","address","geocoding_id","rating","motion_photo","provider_user_id","person"]'
+            # Fetch in batches of 1000
+            offset = 0
 
-            }
-            response = session.get(photo_url, params=params, verify=False)
-            self.__logger.debug(response.text)
-            self.__logger.debug(response.url)
-            response.raise_for_status()
-            data = response.json()
+            FetchedAll = False
+            while not FetchedAll:
+                self.__logger.info('Starting for loop to retrieve file list')
+                params = {
+                    "api": PHOTO_BROWSE_ALBUM_API,
+                    "method": "list",
+                    "version": "4",
+                    "offset": offset,
+                    "limit": '250',
+                    "id": 1,
+                    "passphrase": self.albumsInformation[album_name]['passphrase'],
+                    'additional': '["description","tag","exif","resolution","orientation","gps","video_meta","video_convert","thumbnail","address","geocoding_id","rating","motion_photo","provider_user_id","person"]'
+
+                }
+
+                response = session.get(photo_url, params=params, verify=False)
+                self.__logger.debug(response.text)
+                self.__logger.debug(response.url)
+                response.raise_for_status()
+                data = response.json()
             
-            if not data["success"]:
-                self.__logger.error("Failed to get album content")
-            elif len(data['data']['list']) != 0:
-                counter = 0
-                counter100 = 0
-                for file in data['data']['list']:
-                    counter = counter+1
-                    if counter == 100:
-                        counter = 0
-                        counter100 = counter100 +1
-                        self.__logger.info('Number of processed files in hundreds: '+ str(counter100))
+                if not data["success"]:
+                    self.__logger.error("Failed to get album content")
+                elif len(data['data']['list']) != 0:
+                    self.__logger.info(len(data['data']['list']))
+                
+                
+                    counter = 0
+                    for file in data['data']['list']:
+                        counter = counter+1
+                            
+                        if file['folder_id'] in self.folderDict:
+                            theId = str(file['id'])
+                            self.file_list[theId] = {}
+                            if self.folderDict[file['folder_id']]['name'] == '/':
+                                self.file_list[theId]['fname'] = '/' + file['filename']
+                            else:
+                                self.file_list[theId]['fname'] = self.folderDict[file['folder_id']]['name'] + '/' + file['filename']
+                            if self.folderDict[file['folder_id']]['team'] == True:
+                                self.file_list[theId]['fname'] = 'shared' + self.file_list[theId]['fname']
+                            else:
+                                self.file_list[theId]['fname'] = 'mine' + self.file_list[theId]['fname']
+                                               
+                            if 'time' in file:
+                                self.file_list[theId]['exif_datetime'] = file['time']
+                                self.file_list[theId]['last_modified'] = file['time']
+                            else:
+                                self.file_list[theId]['exif_datetime'] = datetime.datetime.now()
+                                self.file_list[theId]['last_modified'] = datetime.datetime.now()
+
+                            if 'orientation' in file['additional']:
+                                self.file_list[theId]['orientation'] = file['additional']['orientation']
+                            if 'address' in file['additional']:
+                                if 'city' in file['additional']['address']:
+                                    self.file_list[theId]['location'] = file['additional']['address']['city']
+                                elif 'town' in file['additional']['address']:
+                                    self.file_list[theId]['location'] = file['additional']['address']['town']
+                                elif 'village ' in file['additional']['address']:
+                                    self.file_list[theId]['location'] = file['additional']['address']['village']
+                                if 'country' in file['additional']['address']:
+                                    self.file_list[theId]['location'] = self.file_list[theId]['location'] + ',' + file['additional']['address']['country']
+
+                            self.file_list[theId]['caption'] = self.folderDict[file['folder_id']]['name']
+                            self.file_list[theId]['file_id'] = theId
+
+                     
+                            self.listFileIndexes.append(theId)
+    
+                    if counter < 250:
+                        FetchedAll = True
+                        total = counter+offset
+                        self.__logger.info('Fetched ' + str(total ) + ' file infos')
+                    else:
+                        offset = offset + 250
+                        self.__logger.info(str(offset))
                         
-                    if file['folder_id'] in self.folderDict:
-                        theId = str(file['id'])
-                        self.file_list[theId] = {}
-                        if self.folderDict[file['folder_id']]['name'] == '/':
-                            self.file_list[theId]['fname'] = '/' + file['filename']
-                        else:
-                            self.file_list[theId]['fname'] = self.folderDict[file['folder_id']]['name'] + '/' + file['filename']
-                        if self.folderDict[file['folder_id']]['team'] == True:
-                            self.file_list[theId]['fname'] = 'shared' + self.file_list[theId]['fname']
-                        else:
-                            self.file_list[theId]['fname'] = 'mine' + self.file_list[theId]['fname']
-                                           
-                        if 'time' in file:
-                            self.file_list[theId]['exif_datetime'] = file['time']
-                            self.file_list[theId]['last_modified'] = file['time']
-                        else:
-                            self.file_list[theId]['exif_datetime'] = datetime.datetime.now()
-                            self.file_list[theId]['last_modified'] = datetime.datetime.now()
-
-                        if 'orientation' in file['additional']:
-                            self.file_list[theId]['orientation'] = file['additional']['orientation']
-                        if 'address' in file['additional']:
-                            if 'city' in file['additional']['address']:
-                                self.file_list[theId]['location'] = file['additional']['address']['city']
-                            elif 'town' in file['additional']['address']:
-                                self.file_list[theId]['location'] = file['additional']['address']['town']
-                            elif 'village ' in file['additional']['address']:
-                                self.file_list[theId]['location'] = file['additional']['address']['village']
-                            if 'country' in file['additional']['address']:
-                                self.file_list[theId]['location'] = self.file_list[theId]['location'] + ',' + file['additional']['address']['country']
-
-                        self.file_list[theId]['caption'] = self.folderDict[file['folder_id']]['name']
-                        self.file_list[theId]['file_id'] = theId
-
-                 
-                        self.listFileIndexes.append(theId)
+                            
             tempAlbumInfo = {}
             tempAlbumInfo['version'] = self.albumsInformation[album_name]['version']
             tempAlbumInfo['fileIds'] = self.listFileIndexes 
@@ -494,6 +512,7 @@ class SynologyAccess():
     
 
     def create_album_list(self):
+        self.__logger.info('Creating album list')
         self.list_all_albums()
         #self.updateFolderDictionary()
         
@@ -541,7 +560,7 @@ if __name__ == "__main__":
     
     #t.build_folder_dictionary(True)
     print(t.get_album_list(True))
-    for id in u:
-        print(t.getFilePathFromFileList(id))
+    #for id in u:
+     #   print(t.getFilePathFromFileList(id))
     time.sleep(5)
     t.stop()
