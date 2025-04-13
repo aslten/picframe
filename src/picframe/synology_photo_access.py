@@ -271,14 +271,19 @@ class SynologyAccess():
 
     def get_album(self, album_name, forceUpdate = False):
 
+        if self.albumsInformation == {}:
+            self.list_all_albums()
+
         if album_name in self.fileInfoDict and not forceUpdate:
+            self.__logger.info(self.albumsInformation)
             if album_name in self.albumsInformation:
                 if self.fileInfoDict[album_name]['version'] == self.albumsInformation[album_name]['version']:
                     # File information is up to date
                     self.listFileIndexes = self.fileInfoDict[album_name]['fileIds']
                     self.file_list = self.fileInfoDict[album_name]['fileInfo']
+                    self.__logger.info('Album file list exists in saved file.')
                     return
-                
+       
         # We need to fetch the file information
         if self.sid == None:
             self.__logger.error("No active session. Please login first.")
@@ -312,7 +317,15 @@ class SynologyAccess():
             if not data["success"]:
                 self.__logger.error("Failed to get album content")
             elif len(data['data']['list']) != 0:
+                counter = 0
+                counter100 = 0
                 for file in data['data']['list']:
+                    counter = counter+1
+                    if counter == 100:
+                        counter = 0
+                        counter100 = counter100 +1
+                        self.__logger.info('Number of processed files in hundreds: '+ str(counter100))
+                        
                     if file['folder_id'] in self.folderDict:
                         theId = str(file['id'])
                         self.file_list[theId] = {}
