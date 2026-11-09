@@ -199,6 +199,8 @@ class InterfaceMQTT:
         self.__setup_switch(client, "use_mine_album", "mdi:folder", available_topic,
                             self.__controller.useMineAlbum, entity_category="config")
 
+        self.__setup_switch(client, "power_save", "mdi:power-sleep",
+                            available_topic, self.__controller.power_save)
         # buttons
         self.__setup_button(client, "delete", "mdi:delete", available_topic)
         self.__setup_button(client, "back", "mdi:skip-previous", available_topic)
@@ -493,6 +495,14 @@ class InterfaceMQTT:
             elif msg == "OFF":
                 self.__controller.paused = False
                 client.publish(state_topic, "OFF", retain=True)
+        # power_save
+        elif message.topic == switch_topic_head + "_power_save/set":
+            if msg in ("ON", "OFF"):
+                self.__controller.power_save = (msg == "ON")
+                client.publish(
+                    switch_topic_head + "_power_save/state",
+                    msg, retain=True
+                )
         # back buttons
         elif message.topic == button_topic_head + "_back/set":
             if msg == "ON":

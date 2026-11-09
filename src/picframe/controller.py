@@ -51,6 +51,7 @@ class Controller:
         self.__http_config = self.__model.get_http_config()
         self.__mqtt_config = self.__model.get_mqtt_config()
         self.__paused = False
+        self.__power_save = False
         self.__force_navigate = False
         self.__next_tm = 0
         self.__date_from = make_date('1901/12/15')  # TODO This seems to be the minimum date to be handled by date functions  # noqa: E501
@@ -62,6 +63,20 @@ class Controller:
         self.__interface_peripherals = None
         self.__interface_mqtt = None
         self.__interface_http = None
+
+    @property
+    def power_save(self):
+        return self.__power_save
+
+    @power_save.setter
+    def power_save(self, enabled):
+        enabled = bool(enabled)
+        if self.__power_save != enabled:
+            self.__power_save = enabled
+            if not enabled:
+                self.__next_tm = 0
+            if self.__mqtt_config['use_mqtt']:
+                self.publish_state()
 
     @property
     def paused(self):
@@ -328,7 +343,7 @@ class Controller:
 
             tm = time.time()
             pics = None  # get_next_file returns a tuple of two in case paired portraits have been specified
-            if not self.paused and tm > self.__next_tm or self.__force_navigate:
+            if not self.__power_save and ((not self.paused and tm > self.__next_tm) or self.__force_navigate):
                 #self.publish_state()
                 self.__next_tm = tm + self.__model.time_delay
                 self.__force_navigate = False
@@ -356,8 +371,15 @@ class Controller:
                 loop_running = True
                 skip_image = False
             else:
-                self.__model.pause_looping = self.__viewer.is_in_transition()
-                (loop_running, skip_image) = self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused)
+                if self.__power_save:
+                    # Keep indexing active but stop rendering images.
+                    self.__model.pause_looping = False
+                    loop_running, skip_image = self.__viewer.power_save_loop()
+                else:
+                    self.__model.pause_looping = self.__viewer.is_in_transition()
+                    loop_running, skip_image = self.__viewer.slideshow_is_running(
+                        pics, time_delay, fade_time, self.__paused
+                    )
             
             if not loop_running:
                 break

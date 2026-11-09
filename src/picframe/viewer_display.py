@@ -525,7 +525,25 @@ class ViewerDisplay:
                                           h=bkg_hgt, y=-int(self.__display.height) // 2 + bkg_hgt // 2, z=4.0)
             self.__text_bkg.set_draw_details(self.__flat_shader, [text_bkg_tex])
 
+    def power_save_loop(self):
+        # Keep graphics events alive without rendering images.
+        self.__display.frames_per_second = 1.0
+        return self.__display.loop_running(), False
+
     def slideshow_is_running(self, pics=None, time_delay=200.0, fade_time=10.0, paused=False):  # noqa: C901
+        # Lower rendering rate when the displayed image is static.
+        text_animating = (
+            self.__show_text_tm > 0.0
+            and any(b is not None for b in self.__textblocks)
+            and time.time() < self.__name_tm
+        )
+        animating = (
+            pics is not None or self.__alpha < 1.0
+            or self.__kenburns or text_animating
+        )
+        self.__display.frames_per_second = (
+            self.__fps if animating else min(self.__fps, 5.0)
+        )
         loop_running = self.__display.loop_running()
         tm = time.time()
         if pics is not None:
