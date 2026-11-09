@@ -171,7 +171,7 @@ class ImageCache:
                 row = self.__db.execute(sql).fetchone()  # description inserted in table
         except OSError:
             self.__logger.warning("Image '%s' does not exists or is inaccessible", row['fname'])
-        if row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
+        if self.__geo_reverse is not None and row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
             if self.__get_geo_location(row['latitude'], row['longitude']):
                 row = self.__db.execute(sql).fetchone()  # description inserted in table
         sql = "UPDATE file SET displayed_count = displayed_count + 1, last_displayed = ? WHERE file_id = ?"
