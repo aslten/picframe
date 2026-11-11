@@ -155,6 +155,11 @@ class InterfaceMQTT:
         _, dir_list = self.__controller.get_directory_list()
         dir_list.sort()
         self.__setup_select(client, "directory", dir_list, "mdi:folder-multiple-image", available_topic, init=True)
+        current_dir = self.__controller.get_directory_list()[0]
+        parent = current_dir.partition("/")[0]
+        options = ["Alla bilder"] + self.__controller.get_subdirectory_list(parent)
+        self.__setup_select(client, "subfolder", options,
+                            "mdi:folder-outline", available_topic, init=True)
         command_topic = self.__device_id + "/directory"
         client.subscribe(command_topic, qos=0)
 
@@ -610,6 +615,22 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/directory":
             self.__logger.info("Recieved subdirectory: %s", msg)
             self.__controller.subdirectory = msg
+            current_dir, _ = self.__controller.get_directory_list()
+            parent = current_dir.partition("/")[0]
+            available_topic = "homeassistant/switch/" + self.__device_id + "/available"
+            options = ["Alla bilder"] + self.__controller.get_subdirectory_list(parent)
+            self.__setup_select(client, "subfolder", options,
+                                "mdi:folder-outline", available_topic)
+            self.publish_state()
+
+        elif message.topic == self.__device_id + "/subfolder":
+            current_dir, _ = self.__controller.get_directory_list()
+            parent = current_dir.partition("/")[0]
+            options = ["Alla bilder"] + self.__controller.get_subdirectory_list(parent)
+            if msg in options:
+                selected = parent if msg == "Alla bilder" else parent + "/" + msg
+                self.__controller.subdirectory = selected
+                self.publish_state()
         # change shared album
         elif message.topic == self.__device_id + "/shared_album":
             self.__logger.info("Recieved shared album: %s", msg)
@@ -693,7 +714,9 @@ class InterfaceMQTT:
         # sensor
         # directory sensor
         actual_dir, dir_list = self.__controller.get_directory_list()
-        sensor_state_payload["directory"] = actual_dir
+        parent, _, child = actual_dir.partition("/")
+        sensor_state_payload["directory"] = parent
+        sensor_state_payload["subfolder"] = child or "Alla bilder"
         # shared album sensor
         actual_shared_album, shared_album_list = self.__controller.get_album_list(True)
         sensor_state_payload["shared_album"] = actual_shared_album

@@ -324,6 +324,9 @@ class Controller:
         actual_dir, dir_list = self.__model.get_directory_list()
         return actual_dir, dir_list
 
+    def get_subdirectory_list(self, parent):
+        return self.__model.get_subdirectory_list(parent)
+
     def get_album_list(self, team=False):
         actual_album, album_list = self.__model.get_album_list(team)
         return actual_album, album_list

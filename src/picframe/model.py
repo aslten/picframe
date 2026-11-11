@@ -476,6 +476,36 @@ class Model:
         return actual_dir, subdir_list
 
 
+    def get_subdirectory_list(self, parent):
+        """List immediate subdirectories of a top-level folder."""
+        root_name = os.path.basename(os.path.normpath(self.__pic_dir))
+
+        if parent in ("", root_name):
+            return []
+
+        if parent in (".", "..") or "/" in parent or "\\\\" in parent:
+            return []
+
+        path = os.path.join(self.__pic_dir, parent)
+        follow_links = self.get_model_config()['follow_links']
+        result = []
+
+        try:
+            with os.scandir(path) as entries:
+                for entry in entries:
+                    if entry.name.startswith(".") or entry.name == "@eaDir":
+                        continue
+                    if entry.is_symlink() and not follow_links:
+                        continue
+                    if entry.is_dir(follow_symlinks=follow_links):
+                        result.append(entry.name)
+        except OSError as exc:
+            self.__logger.warning(
+                "Cannot list subdirectories of %s: %s", parent, exc
+            )
+
+        return sorted(result)
+
     def get_album_list(self, team=False):
         album_list = self.__image_synology.get_album_list(team)
         if team == True:
