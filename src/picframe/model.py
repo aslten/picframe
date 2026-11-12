@@ -459,6 +459,9 @@ class Model:
         self.__image_synology.stop()
         
 
+    def request_target_folder(self, folder_name):
+        self.__image_cache.request_target_folder(folder_name)
+
     def purge_files(self):
         self.__image_cache.purge_files()
 
@@ -514,6 +517,9 @@ class Model:
             actual_album = self.__mineAlbumName
         return actual_album, album_list
     
+    def consume_completed_target(self):
+        return self.__image_cache.consume_completed_target()
+
     def force_reload(self):
         self.__reload_files = True
 

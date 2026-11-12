@@ -212,6 +212,7 @@ class InterfaceMQTT:
         self.__setup_button(client, "next", "mdi:skip-next", available_topic)
         self.__setup_button(client, "refresh_album_list", "mdi:folder-refresh", available_topic)
         self.__setup_button(client, "refresh_file_list", "mdi:folder-refresh", available_topic)
+        self.__setup_button(client, "index_folder", "mdi:folder-sync", available_topic)
 
         client.subscribe(self.__device_id + "/purge_files", qos=0)  # close down without killing!
         client.subscribe(self.__device_id + "/stop", qos=0)  # close down without killing!
@@ -671,6 +672,18 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/tags_filter":
             self.__logger.info("Recieved tags filter: %s", msg)
             self.__controller.tags_filter = msg
+
+        # Index the currently selected folder
+        elif message.topic == button_topic_head + "_index_folder/set":
+            self.__logger.info("Received index_folder: %s", msg)
+            if msg == "ON" and not self.__controller.useAlbum:
+                folder = self.__controller.subdirectory
+                if folder:
+                    self.__controller.request_target_folder(folder)
+                    self.__logger.info("Requested indexing of %s", folder)
+                else:
+                    self.__logger.warning(
+                        "Cannot target-index the picture root directory")
 
         # set the flag to purge files from database
         elif message.topic == self.__device_id + "/purge_files":

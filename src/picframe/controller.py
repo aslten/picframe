@@ -129,6 +129,9 @@ class Controller:
             if pic is not None:
                 self.__viewer.reset_name_tm(pic, self.paused, side, self.__model.get_current_pics()[1] is not None)
 
+    def request_target_folder(self, folder_name):
+        self.__model.request_target_folder(folder_name)
+
     def purge_files(self):
         self.__model.purge_files()
 
@@ -341,6 +344,16 @@ class Controller:
         
 
         while self.keep_looping:
+            while True:
+                completed_folder = self.__model.consume_completed_target()
+                if completed_folder is None:
+                    break
+                if (not self.__model.useAlbum
+                        and completed_folder == self.__model.subdirectory
+                        and self.__model.get_number_of_files() == 0):
+                    self.__model.force_reload()
+                    self.__next_tm = 0
+
             time_delay = self.__model.time_delay
             fade_time = self.__model.fade_time
 

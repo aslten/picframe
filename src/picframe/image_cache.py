@@ -3,6 +3,7 @@ import os
 import time
 import logging
 import threading
+import queue
 import sys
 from pathlib import Path
 import iptcinfo3
@@ -51,6 +52,8 @@ class ImageCache:
         self.__pause_looping = False
         self.__shutdown_completed = False
         self.__purge_files = False
+        self.__target_requests = queue.Queue()
+        self.__completed_targets = queue.Queue()
 
         t = threading.Thread(target=self.__loop)
         t.start()
@@ -62,6 +65,18 @@ class ImageCache:
                 for _ in range(self.__update_interval):
                     if self.__keep_looping == False:
                         break
+                    if not self.__pause_looping:
+                        try:
+                            target = self.__target_requests.get_nowait()
+                        except queue.Empty:
+                            pass
+                        else:
+                            try:
+                                self.__update_target_folder(target)
+                            except (OSError, sqlite3.Error) as exc:
+                                self.__logger.error(
+                                    "Targeted indexing failed for %s: %s",
+                                    target, exc)
                     time.sleep(1)
             time.sleep(0.01)
 
@@ -70,6 +85,17 @@ class ImageCache:
         self.__db_write_lock.release()
         self.__db.close()
         self.__shutdown_completed = True
+
+    def request_target_folder(self, folder_name):
+        """Request indexing of one folder in the existing worker."""
+        self.__target_requests.put(folder_name)
+
+    def consume_completed_target(self):
+        """Return a completed folder, or None."""
+        try:
+            return self.__completed_targets.get_nowait()
+        except queue.Empty:
+            return None
 
     def pause_looping(self, value):
         self.__pause_looping = value
@@ -82,6 +108,45 @@ class ImageCache:
 
     def purge_files(self):
         self.__purge_files = True
+
+    def __update_target_folder(self, folder_name):
+        """Index a folder without scanning the entire picture tree."""
+        root = Path(self.__picture_dir).resolve()
+        target = (root / folder_name).resolve()
+
+        if (Path(folder_name).is_absolute()
+                or target == root
+                or not target.is_relative_to(root)
+                or not target.is_dir()):
+            self.__logger.warning(
+                "Invalid target folder: %s", folder_name)
+            return False
+
+        folders = self.__get_modified_folders(str(target), force=True)
+        files = self.__get_modified_files(folders)
+
+        self.__logger.info(
+            "Targeted indexing: %s (%d files)",
+            folder_name, len(files))
+
+        for file in files:
+            while self.__pause_looping and self.__keep_looping:
+                time.sleep(0.1)
+            if not self.__keep_looping:
+                return False
+            self.__insert_file(file)
+
+        if not self.__keep_looping:
+            return False
+
+        self.__update_folder_info(folders)
+        with self.__db_write_lock:
+            self.__db.commit()
+
+        self.__logger.info(
+            "Targeted indexing completed: %s", folder_name)
+        self.__completed_targets.put(folder_name)
+        return True
 
     def update_cache(self):
         """Update the cache database with new and/or modified files
@@ -366,12 +431,13 @@ class ImageCache:
     #     - Found on disk, but newer than the associated record in the 'folder' table
     #     - Found on disk, but flagged as 'missing' in the 'folder' table
     # --- Note that all folders returned currently exist on disk
-    def __get_modified_folders(self):
+    def __get_modified_folders(self, root_dir=None, force=False):
         out_of_date_folders = []
         sql_select = "SELECT * FROM folder WHERE name = ?"
 
         subfolders  = []
-        for dirpath, dirnames, _ in os.walk(self.__picture_dir, followlinks=self.__follow_links):
+        scan_root = self.__picture_dir if root_dir is None else root_dir
+        for dirpath, dirnames, _ in os.walk(scan_root, followlinks=self.__follow_links):
             if not self.__keep_looping:
                 return out_of_date_folders
             # Filter out unwanted directories
@@ -396,7 +462,7 @@ class ImageCache:
           #  print(dir)
             mod_tm = int(os.stat(directory).st_mtime)
             found = self.__db.execute(sql_select, (directory,)).fetchone()
-            if not found or found['last_modified'] < mod_tm or found['missing'] == 1:
+            if force or not found or found['last_modified'] < mod_tm or found['missing'] == 1:
                 out_of_date_folders.append((directory, mod_tm))
         return out_of_date_folders
 
