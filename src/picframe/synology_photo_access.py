@@ -4,6 +4,7 @@ import configparser
 import logging
 import datetime
 import pickle
+import tempfile
 import threading
 import time
 
@@ -89,8 +90,17 @@ class SynologyAccess():
             self.__logger.warning(f"Folder file {folderfile} not found. Returning empty dictionary.")
             return {}
 
-        with open(folderfile, 'rb') as file:
-            return pickle.load(file)
+        try:
+            with open(folderfile, 'rb') as file:
+                data = pickle.load(file)
+            if not isinstance(data, dict):
+                raise ValueError("Cache does not contain a dictionary")
+            return data
+        except (OSError, EOFError, pickle.UnpicklingError,
+                AttributeError, ValueError, TypeError) as exc:
+            self.__logger.warning(
+                "Cannot read Synology cache %s: %s", folderfile, exc)
+            return {}
 
     def save_folderdict_to_file(self, fileType):
         """
@@ -107,11 +117,25 @@ class SynologyAccess():
 
         folderfile = os.path.expanduser(filePath)
         
-        with open(folderfile, 'wb') as file:
-            if fileType == FOLDER_INFO:
-                pickle.dump(self.folderDict, file)
-            else:
-                pickle.dump(self.fileInfoDict, file)
+        data = self.folderDict if fileType == FOLDER_INFO else self.fileInfoDict
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode='wb',
+                dir=os.path.dirname(folderfile),
+                prefix='.' + os.path.basename(folderfile) + '.',
+                suffix='.tmp',
+                delete=False
+            ) as file:
+                temp_path = file.name
+                pickle.dump(data, file)
+                file.flush()
+                os.fsync(file.fileno())
+
+            os.replace(temp_path, folderfile)
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.unlink(temp_path)
 
     def _run_periodic_task(self):
         """
