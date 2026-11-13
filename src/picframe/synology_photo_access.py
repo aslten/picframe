@@ -339,8 +339,10 @@ class SynologyAccess():
                 data = response.json()
             
                 if not data["success"]:
-                    self.__logger.error("Failed to get album content")
-                elif len(data['data']['list']) != 0:
+                    raise ValueError("Synology Photos album API reported failure")
+                elif len(data['data']['list']) == 0:
+                    FetchedAll = True
+                else:
                     self.__logger.info(len(data['data']['list']))
                 
                 
