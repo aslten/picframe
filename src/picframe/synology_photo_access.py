@@ -33,6 +33,7 @@ DEFAULT_FILEINFO_FILE= "~/picframe_data/config/fileinfo.pkl"
 FOLDER_INFO = True
 FILE_INFO = False
 DEFAULT_CONFIGFILE = "~/picframe_data/config/config.ini"
+REQUEST_TIMEOUT = (5, 60)  # connect, read (seconds)
 
 class SynologyAccess():
     def __init__(self):
@@ -58,7 +59,6 @@ class SynologyAccess():
 
         self.mineId = 0
 
-        self.login()
 
         """ Start the periodic task of folder scanning
         
@@ -120,25 +120,39 @@ class SynologyAccess():
         """
 
     
-        while not self._stop_event.is_set():
-            self.__logger.debug('Started update of folders')
-            self.updateFolderDictionary()
-            self.__logger.debug('Completed folder update')
-            for _ in range(self.interval):
-                if self._stop_event.is_set():
-                    break
-                time.sleep(1)
-        self.__shutdown_completed = True
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    if self.sid is None:
+                        self.login()
+                    self.__logger.debug('Started update of folders')
+                    self.updateFolderDictionary()
+                    self.__logger.debug('Completed folder update')
+                except Exception as exc:
+                    self.sid = None
+                    self.__logger.warning(
+                        "Synology background update failed (%s); retrying in 60 seconds",
+                        type(exc).__name__)
+                    delay = 60
+                else:
+                    delay = self.interval
+
+                self._stop_event.wait(delay)
+        finally:
+            self.__shutdown_completed = True
 
     def stop(self):
         """
         Stop the periodic task and wait for the thread to terminate.
         """
-        self.__shutdown_completed = False
         self._stop_event.set()
-        while not self.__shutdown_completed:
-            time.sleep(0.05)  # make function blocking to ensure staged shutdown
-        self.logout()
+        self._thread.join()
+        try:
+            self.logout()
+        except requests.RequestException as exc:
+            self.__logger.warning(
+                "Synology logout failed (%s)", type(exc).__name__)
+            self.sid = None
 
 
     def login(self):
@@ -157,7 +171,7 @@ class SynologyAccess():
         #if otp_code:
          #   params["otp_code"] = otp_code
 
-        response = self.session.get(self.auth_url, params=params, verify=False)
+        response = self.session.get(self.auth_url, params=params, verify=False, timeout=REQUEST_TIMEOUT)
 
         response.raise_for_status()
         data = response.json()
@@ -182,7 +196,7 @@ class SynologyAccess():
         headers = {
             "Accept": "application/json"
         }
-        response = self.session.get(url,headers=headers, params=params,  verify=False)
+        response = self.session.get(url,headers=headers, params=params,  verify=False, timeout=REQUEST_TIMEOUT)
 
         try:
             response.raise_for_status()
@@ -201,7 +215,7 @@ class SynologyAccess():
             "method": "logout",
             "session": "SynoPhotos"
         }
-        response = self.session.get(self.auth_url, params=params, verify=False)
+        response = self.session.get(self.auth_url, params=params, verify=False, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         self.sid = None
  
@@ -221,7 +235,7 @@ class SynologyAccess():
             "version": "1",
             "method": "me"
         }
-        response = session.get(photo_url, params=params, verify=False)
+        response = session.get(photo_url, params=params, verify=False, timeout=REQUEST_TIMEOUT)
         #print(response.url)
         response.raise_for_status()
         data = response.json()
@@ -246,7 +260,7 @@ class SynologyAccess():
             "offset": "0",
             "limit": "1000"
         }
-        response = session.get(photo_url, params=params, verify=False)
+        response = session.get(photo_url, params=params, verify=False, timeout=REQUEST_TIMEOUT)
         #print(response.url)
         response.raise_for_status()
         data = response.json()
@@ -318,7 +332,7 @@ class SynologyAccess():
 
                 }
 
-                response = session.get(photo_url, params=params, verify=False)
+                response = session.get(photo_url, params=params, verify=False, timeout=REQUEST_TIMEOUT)
                 self.__logger.debug(response.text)
                 self.__logger.debug(response.url)
                 response.raise_for_status()
@@ -435,7 +449,7 @@ class SynologyAccess():
             "offset": 0,
             "limit": 1000
         }
-        response = session.get(photo_url, params=params, verify=False)
+        response = session.get(photo_url, params=params, verify=False, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
 
@@ -494,7 +508,7 @@ class SynologyAccess():
         if parent != None:
             params["id"] = parent
     
-        response = session.get(photo_url, params=params, verify=False)
+        response = session.get(photo_url, params=params, verify=False, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
 

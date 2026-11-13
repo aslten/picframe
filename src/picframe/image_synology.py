@@ -3,6 +3,7 @@ import os
 import time
 import logging
 import threading
+import requests
 
 import sys
 from pathlib import Path
@@ -53,7 +54,19 @@ class ImageSynology:
     def __loop(self):
         while self.__keep_looping:
             if not self.__pause_looping and self.__albumName != '':
-                self.create_album_list()
+                # Wait until the background login has succeeded.
+                if self.__synology_photo.sid is None:
+                    time.sleep(1)
+                    continue
+
+                try:
+                    self.create_album_list()
+                except (requests.RequestException, KeyError, ValueError) as exc:
+                    self.__logger.warning(
+                        "Synology album update failed: %s", exc)
+                    time.sleep(1)
+                    continue
+
                 for _ in range(self.__update_interval):
                     if self.__keep_looping == False:
                         break
@@ -92,7 +105,14 @@ class ImageSynology:
         self.__synology_photo.get_album(self.__albumName, True)
 
     def get_file_list(self):
-        return self.__synology_photo.get_file_list(self.__albumName)
+        if self.__synology_photo.sid is None:
+            return []
+        try:
+            return self.__synology_photo.get_file_list(self.__albumName)
+        except (requests.RequestException, KeyError, ValueError) as exc:
+            self.__logger.warning(
+                "Synology file list unavailable: %s", exc)
+            return []
         #try:
          #   return self.__synology_photo.get_file_list(self.__albumName)
         #except Exception:

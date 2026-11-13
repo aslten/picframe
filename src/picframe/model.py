@@ -553,7 +553,7 @@ class Model:
 
             # If we don't have any files to show, prepare the "no images" image
             # Also, set the reload_files flag so we'll check for new files on the next pass...
-            if (self.__number_of_files == 0 or missing_images >= self.__number_of_files) and self.__useAlbum == False:
+            if (self.__number_of_files == 0 or missing_images >= self.__number_of_files):
                 pic1 = Pic(self.__no_files_img, 0, 0)
                 self.__reload_files = True
                 #print('no files to show')
