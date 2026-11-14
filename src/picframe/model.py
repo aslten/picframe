@@ -594,7 +594,7 @@ class Model:
             else:
                 file_id = self.__file_list[self.__file_index]
                 self.__logger.info('Get file from album')
-                pic_row = self.__image_synology.get_file_info(file_id)
+                pic_row = self.__image_synology.get_file_info(file_id).copy()
                 firstPart = os.path.normpath(pic_row['fname']).split(os.sep)[0]
                 remaining_path = os.path.normpath(pic_row['fname']).split(os.sep)[1:]
                 remaining_path = os.path.join(*remaining_path)
@@ -620,6 +620,8 @@ class Model:
         return self.__current_pics
 
     def get_number_of_files(self):
+        if self.__useAlbum:
+            return sum(1 for pic in self.__file_list if pic is not None)
         return sum(
                     sum(1 for pic in pics if pic is not None)
                     for pics in self.__file_list
